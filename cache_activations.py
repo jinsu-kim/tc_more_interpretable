@@ -239,7 +239,7 @@ def ensure_token_memmap(cfg: CacheConfig, tokenizer, save_base_dir: str) -> Tupl
             flat = flat[:n]
         arr[write_pos: write_pos + n] = flat
         write_pos += n
-        if write_pos % 2_000_000 < max(1, n):
+        if write_pos % 2e6 < max(1, n):
             print(f"Tokens written: {write_pos:,} ")
         if write_pos >= total_tokens_target:
             break
@@ -848,7 +848,7 @@ def run_caching(
     ckpt_base_dir:                      str,
     save_base_dir:                      str,
     device:                             str = "cuda:0",
-    token_budget:                       int = 10_000_000,
+    token_budget:                       int = 1e7,
     batch_size:                         int = 32,
     min_examples:                       int = 200,
     max_examples_per_feature:           int = 2000,
@@ -939,7 +939,7 @@ def main():
     parser.add_argument("--text_field",                         type=str, default="text")
     parser.add_argument("--seq_len",                            type=int, default=128)
     parser.add_argument("--ctx_len",                            type=int, default=32)
-    parser.add_argument("--token_budget",                       type=int, default=10_000_000)
+    parser.add_argument("--token_budget",                       type=int, default=1e7)
     parser.add_argument("--batch_size",                         type=int, default=32)
     parser.add_argument("--min_examples",                       type=int, default=200)
     parser.add_argument("--max_examples_per_feature",           type=int, default=2000)
