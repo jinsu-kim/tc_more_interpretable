@@ -20,35 +20,35 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 # =========================================================
 @dataclass
 class TrainConfig:
-    mode: str = "sae"  # "sae" or "transcoder"
-    model_name: str = "EleutherAI/pythia-160m"  # gpt2, EleutherAI/pythia-410m
-    layer_idx: int = 10
-    device: str = "cuda:0"
+    mode:             str = "sae"  # "sae" or "transcoder"
+    model_name:       str = "EleutherAI/pythia-160m"  # gpt2, EleutherAI/pythia-410m
+    layer_idx:        int = 10
+    device:           str = "cuda:0"
 
-    dataset_name: str = "EleutherAI/the_pile_deduplicated"
-    dataset_split: str = "train"
-    text_field: str = "text"
-    seq_len: int = 2049     #
-    token_budget: int = 8e10
+    dataset_name:     str = "EleutherAI/the_pile_deduplicated"
+    dataset_split:    str = "train"
+    text_field:       str = "text"
+    seq_len:          int = 2049
+    token_budget:     int = 8e10
 
     micro_batch_size: int = 1
     grad_accum_steps: int = 64
-    num_workers: int = 0
+    num_workers:      int = 0
 
-    n_features: int = 49152
-    k: int = 64
+    n_features:       int = 49152
+    k:                int = 64
 
-    lr: float = 5e-4
-    weight_decay: float = 0.0
-    max_steps: int = 61000
-    log_every: int = 100
-    save_every: int = 5_000
-    save_dir: str = "./ckpts"
+    lr:               float = 5e-4
+    weight_decay:     float = 0.0
+    max_steps:        int = 61000
+    log_every:        int = 100
+    save_every:       int = 5_000
+    save_dir:         str = "./ckpts"
 
-    recon_loss_coef: float = 1.0
-    aux_l2_coef: float = 0.0
+    recon_loss_coef:  float = 1.0
+    aux_l2_coef:      float = 0.0
 
-    seed: int = 42
+    seed:             int = 42
     d_model: Optional[int] = None
     n_layers: Optional[int] = None
     model_family: Optional[str] = None
