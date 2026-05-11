@@ -13,37 +13,34 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 
 # =========================================================
-# 설정: Paulo et al. 스타일에 최대한 맞춘 학습 스크립트
 # - Pythia: The Pile streaming
 # - seq_len=2049
-# - effective batch = micro_batch_size * grad_accum_steps = 64 sequences 기본값
-# - loss = MSE only 기본값(aux_l2_coef=0)
+# - effective batch = micro_batch_size * grad_accum_steps = 64 sequences
+# - loss = MSE only (aux_l2_coef=0)
 # =========================================================
 @dataclass
 class TrainConfig:
     mode: str = "sae"  # "sae" or "transcoder"
-    model_name: str = "EleutherAI/pythia-160m"
+    model_name: str = "EleutherAI/pythia-160m"  # gpt2, EleutherAI/pythia-410m
     layer_idx: int = 10
     device: str = "cuda:0"
 
-    dataset_name: str = "EleutherAI/pile"
+    dataset_name: str = "EleutherAI/the_pile_deduplicated"
     dataset_split: str = "train"
     text_field: str = "text"
-    seq_len: int = 2049
-    token_budget: int = 8_000_000_000
+    seq_len: int = 2049     #
+    token_budget: int = 8e10
 
-    # 논문 batch size 64 sequences를 그대로 한 번에 올리면 OOM 가능성이 큼.
-    # 따라서 micro batch + gradient accumulation으로 effective batch를 맞춘다.
     micro_batch_size: int = 1
     grad_accum_steps: int = 64
     num_workers: int = 0
 
-    n_features: int = 49_152
+    n_features: int = 49152
     k: int = 64
 
     lr: float = 5e-4
     weight_decay: float = 0.0
-    max_steps: int = 61_000
+    max_steps: int = 61000
     log_every: int = 100
     save_every: int = 5_000
     save_dir: str = "./ckpts"
@@ -88,14 +85,14 @@ def infer_model_info(cfg: TrainConfig) -> TrainConfig:
     elif hasattr(hf_cfg, "n_embd"):
         cfg.d_model = int(hf_cfg.n_embd)
     else:
-        raise ValueError(f"hidden size를 추론할 수 없습니다: {cfg.model_name}")
+        raise ValueError(f"Unable to infer hidden size: {cfg.model_name}")
 
     if hasattr(hf_cfg, "num_hidden_layers"):
         cfg.n_layers = int(hf_cfg.num_hidden_layers)
     elif hasattr(hf_cfg, "n_layer"):
         cfg.n_layers = int(hf_cfg.n_layer)
     else:
-        raise ValueError(f"layer 수를 추론할 수 없습니다: {cfg.model_name}")
+        raise ValueError(f"Unable to infer number of layers: {cfg.model_name}")
 
     model_type = getattr(hf_cfg, "model_type", "").lower()
     arch = " ".join(getattr(hf_cfg, "architectures", [])).lower()
@@ -105,7 +102,7 @@ def infer_model_info(cfg: TrainConfig) -> TrainConfig:
     elif model_type == "gpt_neox" or "gptneox" in arch or "gpt_neox" in arch:
         cfg.model_family = "gpt_neox"
     else:
-        raise ValueError(f"지원하지 않는 model family입니다. model_type={model_type}, arch={arch}")
+        raise ValueError(f"Unsupported model family. model_type={model_type}, arch={arch}")
 
     if not (0 <= cfg.layer_idx < cfg.n_layers):
         raise ValueError(f"layer_idx={cfg.layer_idx} is out of range for model with {cfg.n_layers} layers")
@@ -148,10 +145,9 @@ class TokenStreamDataset(IterableDataset):
 
 
 class ActivationExtractor(nn.Module):
-    # mlp_in: FFN 입력, mlp_out: FFN 출력
     def __init__(self, cfg: TrainConfig):
         super().__init__()
-        self.cfg = cfg
+        self.cfg   = cfg
         self.model = AutoModelForCausalLM.from_pretrained(cfg.model_name)
         self.model.eval().to(cfg.device)
         for p in self.model.parameters():
@@ -167,7 +163,7 @@ class ActivationExtractor(nn.Module):
             self.block = self.model.gpt_neox.layers[cfg.layer_idx]
             self._register_gpt_neox_hooks()
         else:
-            raise ValueError(f"지원하지 않는 family: {cfg.model_family}")
+            raise ValueError(f"unsupported family: {cfg.model_family}")
 
     def _register_gpt2_hooks(self):
         def ln2_hook(module, inp, out):
@@ -194,7 +190,7 @@ class ActivationExtractor(nn.Module):
         self._cache = {}
         _ = self.model(input_ids=input_ids)
         if "mlp_in" not in self._cache or "mlp_out" not in self._cache:
-            raise RuntimeError("hook activation을 캡처하지 못했습니다.")
+            raise RuntimeError("Unable to capture hook activation.")
         return self._cache["mlp_in"], self._cache["mlp_out"]
 
 
@@ -205,7 +201,7 @@ class TopKDictionary(nn.Module):
         self.b_enc = nn.Parameter(torch.zeros(n_features))
         self.W_dec = nn.Parameter(torch.empty(n_features, d_in))
         self.b_dec = nn.Parameter(torch.zeros(d_in))
-        self.k = k
+        self.k     = k
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -228,19 +224,19 @@ class SAEModel(nn.Module):
         self.dictionary = TopKDictionary(d_in, n_features, k)
 
     def forward(self, x: torch.Tensor):
-        h = self.dictionary.encode(x)
+        h     = self.dictionary.encode(x)
         x_hat = self.dictionary.decode(h)
         return x_hat, h
 
 
-class NoSkipTranscoder(nn.Module):
+class Transcoder(nn.Module):
     def __init__(self, d_in: int, d_out: int, n_features: int, k: int):
         super().__init__()
         self.W_enc = nn.Parameter(torch.empty(d_in, n_features))
         self.b_enc = nn.Parameter(torch.zeros(n_features))
         self.W_dec = nn.Parameter(torch.empty(n_features, d_out))
         self.b_dec = nn.Parameter(torch.zeros(d_out))
-        self.k = k
+        self.k     = k
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -257,7 +253,7 @@ class NoSkipTranscoder(nn.Module):
         return h @ self.W_dec + self.b_dec
 
     def forward(self, x: torch.Tensor):
-        h = self.encode(x)
+        h     = self.encode(x)
         y_hat = self.decode(h)
         return y_hat, h
 
@@ -286,8 +282,8 @@ def build_model(cfg: TrainConfig) -> nn.Module:
     if cfg.mode == "sae":
         return SAEModel(cfg.d_model, cfg.n_features, cfg.k).to(cfg.device)
     if cfg.mode == "transcoder":
-        return NoSkipTranscoder(cfg.d_model, cfg.d_model, cfg.n_features, cfg.k).to(cfg.device)
-    raise ValueError(f"지원하지 않는 mode: {cfg.mode}")
+        return Transcoder(cfg.d_model, cfg.d_model, cfg.n_features, cfg.k).to(cfg.device)
+    raise ValueError(f"unsupported mode: {cfg.mode}")
 
 
 def normalize_decoder(model: nn.Module):
@@ -306,18 +302,18 @@ def save_checkpoint(cfg: TrainConfig, model: nn.Module, step: int, loss: float, 
 
     payload = {
         "cfg": {
-            "mode": cfg.mode,
-            "model_name": cfg.model_name,
-            "model_family": cfg.model_family,
-            "layer_idx": cfg.layer_idx,
-            "d_model": cfg.d_model,
-            "n_layers": cfg.n_layers,
-            "n_features": cfg.n_features,
-            "k": cfg.k,
-            "dataset_name": cfg.dataset_name,
-            "seq_len": cfg.seq_len,
+            "mode":                 cfg.mode,
+            "model_name":           cfg.model_name,
+            "model_family":         cfg.model_family,
+            "layer_idx":            cfg.layer_idx,
+            "d_model":              cfg.d_model,
+            "n_layers":             cfg.n_layers,
+            "n_features":           cfg.n_features,
+            "k":                    cfg.k,
+            "dataset_name":         cfg.dataset_name,
+            "seq_len":              cfg.seq_len,
             "effective_batch_size": cfg.micro_batch_size * cfg.grad_accum_steps,
-            "aux_l2_coef": cfg.aux_l2_coef,
+            "aux_l2_coef":          cfg.aux_l2_coef,
         },
         "state_dict": model.state_dict(),
     }
@@ -326,7 +322,7 @@ def save_checkpoint(cfg: TrainConfig, model: nn.Module, step: int, loss: float, 
     return path
 
 
-def train_one(cfg: TrainConfig) -> Optional[str]:
+def train_step(cfg: TrainConfig) -> Optional[str]:
     cfg = infer_model_info(cfg)
     set_seed(cfg.seed)
 
@@ -334,11 +330,11 @@ def train_one(cfg: TrainConfig) -> Optional[str]:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    dataset = TokenStreamDataset(cfg, tokenizer)
-    loader = DataLoader(dataset, batch_size=cfg.micro_batch_size, num_workers=cfg.num_workers)
+    dataset   = TokenStreamDataset(cfg, tokenizer)
+    loader    = DataLoader(dataset, batch_size=cfg.micro_batch_size, num_workers=cfg.num_workers)
 
     extractor = ActivationExtractor(cfg)
-    model = build_model(cfg)
+    model     = build_model(cfg)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.max_steps, eta_min=5e-5)
@@ -351,9 +347,9 @@ def train_one(cfg: TrainConfig) -> Optional[str]:
     )
 
     optimizer.zero_grad(set_to_none=True)
-    opt_step = 0
+    opt_step   = 0
     micro_step = 0
-    last_path = None
+    last_path  = None
     accum_logs = []
 
     for batch_ids in loader:
@@ -440,34 +436,34 @@ def parse_str_list(s: str) -> List[str]:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model_name", type=str, default="EleutherAI/pythia-160m")
-    p.add_argument("--layers", type=str, default="10")
-    p.add_argument("--topks", type=str, default="32")
-    p.add_argument("--modes", type=str, default="sae")
-    p.add_argument("--device", type=str, default="cuda:0")
+    p.add_argument("--model_name",       type=str,   default="EleutherAI/pythia-160m")
+    p.add_argument("--layers",           type=str,   default="10")
+    p.add_argument("--topks",            type=str,   default="32")
+    p.add_argument("--modes",            type=str,   default="sae")
+    p.add_argument("--device",           type=str,   default="cuda:0")
 
-    p.add_argument("--dataset_name", type=str, default="EleutherAI/pile")
-    p.add_argument("--dataset_split", type=str, default="train")
-    p.add_argument("--text_field", type=str, default="text")
-    p.add_argument("--seq_len", type=int, default=2049)
-    p.add_argument("--token_budget", type=int, default=8_000_000_000)
-    p.add_argument("--micro_batch_size", type=int, default=1)
-    p.add_argument("--grad_accum_steps", type=int, default=64)
+    p.add_argument("--dataset_name",     type=str,   default="EleutherAI/pile")
+    p.add_argument("--dataset_split",    type=str,   default="train")
+    p.add_argument("--text_field",       type=str,   default="text")
+    p.add_argument("--seq_len",          type=int,   default=2049)
+    p.add_argument("--token_budget",     type=int,   default=8e9)
+    p.add_argument("--micro_batch_size", type=int,   default=1)
+    p.add_argument("--grad_accum_steps", type=int,   default=64)
 
-    p.add_argument("--n_features", type=int, default=49_152)
-    p.add_argument("--lr", type=float, default=5e-4)
-    p.add_argument("--weight_decay", type=float, default=0.0)
-    p.add_argument("--max_steps", type=int, default=140_000)
-    p.add_argument("--log_every", type=int, default=100)
-    p.add_argument("--save_every", type=int, default=5_000)
-    p.add_argument("--save_dir_root", type=str, default="./ckpts")
-    p.add_argument("--aux_l2_coef", type=float, default=0.0)
-    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--n_features",       type=int,   default=49152)
+    p.add_argument("--lr",               type=float, default=5e-4)
+    p.add_argument("--weight_decay",     type=float, default=0.0)
+    p.add_argument("--max_steps",        type=int,   default=140000)
+    p.add_argument("--log_every",        type=int,   default=100)
+    p.add_argument("--save_every",       type=int,   default=5000)
+    p.add_argument("--save_dir_root",    type=str,   default="./ckpts")
+    p.add_argument("--aux_l2_coef",      type=float, default=0.0)
+    p.add_argument("--seed",             type=int,   default=42)
     args = p.parse_args()
 
     layers = parse_int_list(args.layers)
-    topks = parse_int_list(args.topks)
-    modes = parse_str_list(args.modes)
+    topks  = parse_int_list(args.topks)
+    modes  = parse_str_list(args.modes)
 
     model_short = sanitize_model_name(args.model_name)
 
@@ -476,29 +472,29 @@ def main():
             for layer in layers:
                 save_dir = os.path.join(args.save_dir_root, f"{mode}_ckpt_{model_short}")
                 cfg = TrainConfig(
-                    mode=mode,
-                    model_name=args.model_name,
-                    layer_idx=layer,
-                    device=args.device,
-                    dataset_name=args.dataset_name,
-                    dataset_split=args.dataset_split,
-                    text_field=args.text_field,
-                    seq_len=args.seq_len,
-                    token_budget=args.token_budget,
+                    mode=            mode,
+                    model_name=      args.model_name,
+                    layer_idx=       layer,
+                    device=          args.device,
+                    dataset_name=    args.dataset_name,
+                    dataset_split=   args.dataset_split,
+                    text_field=      args.text_field,
+                    seq_len=         args.seq_len,
+                    token_budget=    args.token_budget,
                     micro_batch_size=args.micro_batch_size,
                     grad_accum_steps=args.grad_accum_steps,
-                    n_features=args.n_features,
-                    k=k,
-                    lr=args.lr,
-                    weight_decay=args.weight_decay,
-                    max_steps=args.max_steps,
-                    log_every=args.log_every,
-                    save_every=args.save_every,
-                    save_dir=save_dir,
-                    aux_l2_coef=args.aux_l2_coef,
-                    seed=args.seed,
+                    n_features=      args.n_features,
+                    k=               k,
+                    lr=              args.lr,
+                    weight_decay=    args.weight_decay,
+                    max_steps=       args.max_steps,
+                    log_every=       args.log_every,
+                    save_every=      args.save_every,
+                    save_dir=        save_dir,
+                    aux_l2_coef=     args.aux_l2_coef,
+                    seed=            args.seed,
                 )
-                train_one(cfg)
+                train_step(cfg)
 
 
 if __name__ == "__main__":
