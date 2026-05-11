@@ -442,7 +442,7 @@ def main():
     p.add_argument("--modes",            type=str,   default="sae")
     p.add_argument("--device",           type=str,   default="cuda:0")
 
-    p.add_argument("--dataset_name",     type=str,   default="EleutherAI/pile")
+    p.add_argument("--dataset_name",     type=str,   default="EleutherAI/the_pile_deduplicated")
     p.add_argument("--dataset_split",    type=str,   default="train")
     p.add_argument("--text_field",       type=str,   default="text")
     p.add_argument("--seq_len",          type=int,   default=2049)
