@@ -248,12 +248,8 @@ async def call_novita_batch(records: List[dict], api_key: str, out_path: str):
     sort_jsonl_by_custom_id(out_path)
 
 
-def run_novita(
-    jsonl_path: str,
-    out_path: str,
-    api_key: Optional[str],
-    max_features: Optional[int] = None,
-):
+def run_novita(jsonl_path: str, out_path: str, api_key: Optional[str], max_features: Optional[int] = None):
+
     api_key = require_api_key(api_key, "NOVITA_API_KEY")
 
     records = read_jsonl(jsonl_path)
