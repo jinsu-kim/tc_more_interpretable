@@ -98,7 +98,9 @@ def remove_cache_file_set(save_dir: str, filenames: List[str]):
             except Exception as e:
                 print(f"  [warn] removal failed: {path} ({type(e).__name__}: {e})")
 
+
 def infer_model_info(cfg: CacheConfig) -> CacheConfig:
+
     hf_cfg = AutoConfig.from_pretrained(cfg.model_name)
 
     if hasattr(hf_cfg, "hidden_size"):
@@ -395,6 +397,7 @@ def open_token_store(token_memmap_path: str, total_tokens: int, use_ram_token_st
         print(f"    token store RAM preloaded: {token_arr.nbytes / (1024 ** 2):.1f} MB")
     return token_arr
 
+
 def extract_context_from_memmap(token_arr, global_idx: int, ctx_len: int, total_len: int) -> torch.Tensor:
 
     ctx_half  = ctx_len // 2
@@ -414,14 +417,10 @@ def extract_context_from_memmap(token_arr, global_idx: int, ctx_len: int, total_
 
 # =========================================================
 # =========================================================
-def update_heaps_from_hidden(
-    cfg: CacheConfig,
-    h_cpu: torch.Tensor,          # (B*T, n_features), CPU
-    global_token_idx: int,
-    feature_heaps: Dict[int, list],
-    feature_freq: torch.Tensor,
-    tie_counter_ref: List[int],
-):
+def update_heaps_from_hidden(cfg: CacheConfig, h_cpu: torch.Tensor, global_token_idx: int,
+                             feature_heaps: Dict[int, list], feature_freq: torch.Tensor,
+                             tie_counter_ref: List[int]):
+
     max_ex = cfg.max_examples_per_feature
     BT = h_cpu.shape[0]
 
@@ -450,14 +449,8 @@ def update_heaps_from_hidden(
 
 # =========================================================
 # =========================================================
-def save_cache_from_indices(
-    cfg: CacheConfig,
-    feature_heaps: Dict[int, list],
-    feature_freq: torch.Tensor,
-    save_dir: str,
-    token_memmap_path: str,
-    total_tokens: int,
-) -> List[int]:
+def save_cache_from_indices(cfg: CacheConfig, feature_heaps: Dict[int, list], feature_freq: torch.Tensor,
+                            save_dir: str, token_memmap_path: str, total_tokens: int) -> List[int]:
     os.makedirs(save_dir, exist_ok=True)
     torch.save(feature_freq, os.path.join(save_dir, "freq.pt"))
 
@@ -528,13 +521,8 @@ def _negative_cache_complete(save_dir: str, target_n: int) -> bool:
     return all(hasattr(v, "shape") and int(v.shape[0]) >= target_n for v in obj.values())
 
 
-def save_non_activating_contexts_from_indices(
-    cfg: CacheConfig,
-    neg_indices: Dict[int, List[int]],
-    save_dir: str,
-    token_memmap_path: str,
-    total_tokens: int,
-):
+def save_non_activating_contexts_from_indices(cfg: CacheConfig, neg_indices: Dict[int, List[int]],
+                                              save_dir: str, token_memmap_path: str, total_tokens: int):
     """
     Extract non-activating global_idx
     {feat_idx: Tensor[n_non_activating, ctx_len]}
@@ -571,15 +559,9 @@ def save_non_activating_contexts_from_indices(
     gc.collect()
 
 
-def collect_non_activating_for_combo(
-    cfg: CacheConfig,
-    mode: str,
-    extractor: AllLayerExtractor,
-    tokenizer,
-    layer_records: List[Tuple[int, nn.Module, str, List[int]]],
-    token_memmap_path: str,
-    total_tokens: int,
-):
+def collect_non_activating_for_combo(cfg: CacheConfig, mode: str, extractor: AllLayerExtractor,
+                                     tokenizer, layer_records: List[Tuple[int, nn.Module, str, List[int]]],
+                                     token_memmap_path: str, total_tokens: int):
     """
     Construct strict negative contexts for the scorer.
 
@@ -693,20 +675,11 @@ def collect_non_activating_for_combo(
     gc.collect()
     torch.cuda.empty_cache()
 
-# =========================================================
-# =========================================================
-def run_caching_one_combo(
-    cfg: CacheConfig,
-    mode: str,
-    k: int,
-    extractor: AllLayerExtractor,
-    tokenizer,
-    ckpt_base_dir: str,
-    save_base_dir: str,
-    token_memmap_path: str,
-    total_tokens: int,
-    layers: Optional[List[int]] = None,
-):
+
+def run_caching_one_combo(cfg: CacheConfig, mode: str, k: int, extractor: AllLayerExtractor,
+                          tokenizer, ckpt_base_dir: str, save_base_dir: str, token_memmap_path: str,
+                          total_tokens: int, layers: Optional[List[int]] = None):
+
     short_name = get_short_name(cfg.model_name)
     target_layers = layers if layers is not None else list(range(cfg.n_layers))
 
