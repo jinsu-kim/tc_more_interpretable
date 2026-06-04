@@ -156,12 +156,8 @@ def decode_context(token_ids: torch.Tensor, tokenizer: AutoTokenizer) -> str:
     return tokenizer.decode(ids, skip_special_tokens=False)
 
 
-def decode_context_with_highlight(
-    token_ids: torch.Tensor,
-    center_idx: int,
-    tokenizer: AutoTokenizer,
-    ctx_len: int = 32,
-) -> str:
+def decode_context_with_highlight(token_ids: torch.Tensor, center_idx: int,
+                                  tokenizer: AutoTokenizer, ctx_len: int = 32) -> str:
 
     ids = token_ids.tolist()
     tokens = [tokenizer.decode([i], skip_special_tokens=False) for i in ids]
@@ -175,11 +171,7 @@ def decode_context_with_highlight(
 
 # =========================================================
 # =========================================================
-def sample_features(
-    alive_features: List[int],
-    n_features: int,
-    seed: int = 42,
-) -> List[int]:
+def sample_features(alive_features: List[int], n_features: int, seed: int = 42) -> List[int]:
     """Randomly sampling n_features from alive features"""
     random.seed(seed)
     if len(alive_features) <= n_features:
@@ -187,13 +179,9 @@ def sample_features(
     return random.sample(alive_features, n_features)
 
 
-def sample_examples_stratified(
-    activations: torch.Tensor,
-    contexts: torch.Tensor,
-    n_examples: int,
-    n_quantiles: int = 10,
-    exclude_indices: Optional[List[int]] = None,
-) -> tuple:
+def sample_examples_stratified(activations: torch.Tensor, contexts: torch.Tensor,
+                               n_examples: int, n_quantiles: int = 10,
+                               exclude_indices: Optional[List[int]] = None) -> tuple:
     """
     Activation-value quantile sampling for auto-interpretability.
 
@@ -282,13 +270,9 @@ def sample_examples_stratified(
 
     return acts_valid[selected].cpu(), ctxs_valid[selected.cpu()], original_indices
 
-def sample_non_activating(
-    all_contexts: Dict[int, torch.Tensor],
-    feat_idx: int,
-    n: int,
-    tokenizer: AutoTokenizer,
-    seed: int = 42,
-) -> List[str]:
+
+def sample_non_activating(all_contexts: Dict[int, torch.Tensor], feat_idx: int, n: int,
+                          tokenizer: AutoTokenizer, seed: int = 42) -> List[str]:
     """
     Approximate negative fallback.
 
@@ -314,13 +298,9 @@ def sample_non_activating(
     return results[:n]
 
 
-def sample_non_activating_from_pool(
-    non_activating_contexts: Dict[int, torch.Tensor],
-    feat_idx: int,
-    n: int,
-    tokenizer: AutoTokenizer,
-    seed: int = 42,
-) -> List[str]:
+def sample_non_activating_from_pool(non_activating_contexts: Dict[int, torch.Tensor],
+                                    feat_idx: int, n: int, tokenizer: AutoTokenizer,
+                                    seed: int = 42) -> List[str]:
     """
     Strict negative examples.
     non_activating_contexts[feat_idx] must contain contexts where the target
@@ -355,12 +335,8 @@ def clean_explanation(explanation: str) -> str:
 # =========================================================
 # Explainer
 # =========================================================
-def build_explainer_user_content(
-    contexts: torch.Tensor,
-    activations: torch.Tensor,
-    tokenizer: AutoTokenizer,
-    ctx_len: int = 32,
-) -> str:
+def build_explainer_user_content(contexts: torch.Tensor, activations: torch.Tensor,
+                                 tokenizer: AutoTokenizer, ctx_len: int = 32) -> str:
     """
     Construct the explainer user message using 40 examples
     (10 quantiles × 4 examples per quantile).
@@ -381,20 +357,10 @@ def build_explainer_user_content(
     return "\n".join(lines)
 
 
-def generate_explain_requests(
-    cache_dir: str,
-    requests_dir: str,
-    model_short: str,
-    hf_name: str,
-    layer_idx: int,
-    mode: str,
-    k: int,
-    n_features: int = 500,
-    n_explain_examples: int = 40,
-    seed: int = 42,
-) -> str:
-    """
-    """
+def generate_explain_requests(cache_dir: str, requests_dir: str, model_short: str, hf_name: str, layer_idx: int,
+                              mode: str, k: int, n_features: int = 500, n_explain_examples: int = 40,
+                              seed: int = 42) -> str:
+
     combo_key = f"{model_short}_layer{layer_idx}_{mode}_k{k}"
     cache_path = os.path.join(cache_dir, model_short, f"layer{layer_idx}", f"{mode}_k{k}")
 
@@ -499,21 +465,11 @@ def add_random_highlight_to_text(text: str, rng: random.Random) -> str:
     return " ".join(parts)
 
 
-def generate_score_requests(
-    cache_dir: str,
-    requests_dir: str,
-    scores_dir: str,
-    model_short: str,
-    hf_name: str,
-    layer_idx: int,
-    mode: str,
-    k: int,
-    n_score_examples: int = 50,
-    use_gpt4o: bool = False,
-    seed: int = 42,
-    allow_approx_negatives: bool = False,
-    score_chunk_size: int = 5,
-) -> List[str]:
+def generate_score_requests(cache_dir: str, requests_dir: str, scores_dir: str, model_short: str,
+                            hf_name: str,   layer_idx: int,    mode: str, k: int,
+                            n_score_examples: int = 50, use_gpt4o: bool = False,
+                            seed: int = 42, allow_approx_negatives: bool = False,
+                            score_chunk_size: int = 5) -> List[str]:
 
     combo_key = f"{model_short}_layer{layer_idx}_{mode}_k{k}"
     cache_path = os.path.join(cache_dir, model_short, f"layer{layer_idx}", f"{mode}_k{k}")
@@ -683,7 +639,7 @@ def generate_score_requests(
                     "model": model_id,
                     "messages": messages,
                     "max_tokens": max(32, 8 * n_total),
-                    "temperature": 0.0,
+                    "temperature": 0.0
                 }
                 handles[(task, scorer)].write(
                     json.dumps(record, ensure_ascii=False) + "\n"
